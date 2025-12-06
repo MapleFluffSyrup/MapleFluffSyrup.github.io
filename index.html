@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>槭糖的餅乾占卜</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-dark: #2C221C;
+            --main-font: 'Zen Maru Gothic', sans-serif;
+            --bubble-bg: #FFF8E1;
+            --text-color: #5D4037;
+            --accent-color: #E07A5F;
+        }
+
+        * { box-sizing: border-box; }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: var(--main-font);
+            background-color: var(--bg-dark);
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        #app {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 480px;
+            margin: 0 auto;
+            background: #000;
+            overflow: hidden;
+            transform-style: preserve-3d; 
+        }
+
+        /* --- 背景層 (修復顯示問題) --- */
+        .bg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center bottom;
+            transition: opacity 0.8s ease-in-out;
+            background-color: #332211; 
+        }
+
+        /* 確保開始畫面層級較高，預設顯示 */
+        #bg-start { opacity: 1; z-index: 5; }
+        /* 確保結果畫面層級較低，預設隱藏 */
+        #bg-result { opacity: 0; z-index: 1; }
+
+        /* --- 火焰特效 --- */
+        .fire-effect {
+            position: absolute;
+            top: 15%; 
+            left: 7%; 
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle, rgba(255, 160, 0, 0.7) 0%, rgba(255, 69, 0, 0) 70%);
+            border-radius: 50%;
+            filter: blur(6px);
+            mix-blend-mode: screen; 
+            animation: flicker 0.15s infinite alternate;
+            pointer-events: none;
+            z-index: 6; /* 高於背景 */
+            opacity: 0.8;
+        }
+
+        @keyframes flicker {
+            0% { transform: scale(1); opacity: 0.6; }
+            100% { transform: scale(1.15); opacity: 0.9; }
+        }
+
+        /* --- 氣泡框 --- */
+        .bubble-container {
+            position: absolute;
+            /* ★ 修改：往上移一點，避免擋到餅乾 ★ */
+            bottom: 30%; 
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%; 
+            z-index: 15;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .cute-bubble {
+            background: var(--bubble-bg);
+            color: var(--text-color);
+            font-size: 24px; 
+            font-weight: 900; 
+            padding: 25px 20px;
+            border-radius: 35px;
+            border: 4px solid #FFECB3;
+            text-align: center;
+            line-height: 1.4;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            position: relative;
+            animation: bubble-bounce 3s infinite ease-in-out;
+        }
+
+        .cute-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 12px 12px 0;
+            border-style: solid;
+            border-color: #FFECB3 transparent transparent transparent;
+        }
+        
+        .cute-bubble::before {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 10px 10px 0;
+            border-style: solid;
+            border-color: var(--bubble-bg) transparent transparent transparent;
+            z-index: 1;
+        }
+
+        @keyframes bubble-bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        /* --- 餅乾區 --- */
+        .cookie-plate {
+            position: absolute;
+            bottom: 12%; 
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end; 
+            gap: 15px; 
+            z-index: 20;
+            transition: opacity 0.5s;
+        }
+
+        .cookie-btn {
+            width: 120px; 
+            height: 120px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            animation: float 4s infinite ease-in-out;
+            object-fit: contain;
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
+            /* ★ 確保有點擊區域 ★ */
+            pointer-events: auto;
+        }
+
+        /* 左邊餅乾加大 */
+        .cookie-btn:nth-child(1) {
+            width: 140px;
+            height: 140px;
+            bottom: -10px;
+        }
+        
+        .cookie-btn:hover {
+            transform: scale(1.1) translateY(-10px);
+            filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.9)) brightness(1.1);
+            z-index: 25;
+        }
+        
+        .cookie-btn:active {
+            transform: scale(0.95);
+            filter: brightness(0.8);
+        }
+
+        .cookie-btn:nth-child(2) { animation-delay: 1.2s; }
+        .cookie-btn:nth-child(3) { animation-delay: 2.4s; }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        /* --- 碎屑特效 --- */
+        .crumb {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 1;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+        }
+
+        @keyframes crumb-explode {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0.5); opacity: 0; }
+        }
+
+        .mist-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 248, 225, 0.4);
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 40;
+            transition: opacity 1s;
+        }
+
+        /* --- 結果顯示區 (修復擋住問題) --- */
+        #result-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 45%; 
+            z-index: 30;
+            
+            /* ★ 關鍵修復：預設隱藏且不可點擊 (解決擋住餅乾問題) ★ */
+            visibility: hidden; 
+            pointer-events: none;
+            
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+            padding-bottom: 40px;
+            opacity: 0;
+            transition: opacity 1s 0.5s;
+            text-shadow: 0 2px 10px rgba(255, 255, 255, 0.9);
+        }
+
+        .result-title {
+            font-size: 32px; 
+            color: #3E2723;
+            font-weight: 900;
+            margin-bottom: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 8px 25px;
+            border-radius: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .result-text {
+            font-size: 20px; 
+            color: #4E342E;
+            margin-bottom: 20px;
+            line-height: 1.6;
+            max-width: 90%;
+            font-weight: 700;
+        }
+
+        .maple-note {
+            font-size: 16px;
+            color: #E65100;
+            background: rgba(255, 243, 224, 0.95);
+            padding: 10px 20px;
+            border-radius: 15px;
+            border: 2px dashed #FFB74D;
+            max-width: 95%;
+            animation: pop-in 0.5s ease-out 1s backwards;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        #disclaimer {
+            position: absolute;
+            bottom: 5px;
+            width: 90%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            line-height: 1.3;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 5px 10px;
+            border-radius: 15px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 1s 1s;
+        }
+
+        @keyframes pop-in {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .btn-reset {
+            margin-top: 15px;
+            background: var(--text-color);
+            color: #fff;
+            border: none;
+            padding: 12px 40px;
+            border-radius: 25px;
+            font-family: var(--main-font);
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            opacity: 0.9;
+            pointer-events: auto;
+            transition: transform 0.1s ease-in-out;
+        }
+        
+        .btn-reset:active {
+            transform: scale(1.1) !important;
+            background: var(--accent-color);
+        }
+        
+        #bgm-player { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <audio id="bgm-player" loop>
+        <source src="bgm.mp3" type="audio/mpeg">
+        您的瀏覽器不支援音樂播放
+    </audio>
+
+    <img src="main_visual.png" id="bg-start" class="bg-layer" alt="主畫面" onerror="console.log('找不到 main_visual.png')">
+    <img src="result_visual.png" id="bg-result" class="bg-layer" alt="結果畫面" onerror="console.log('找不到 result_visual.png')">
+
+    <div class="fire-effect"></div>
+
+    <div class="mist-layer" id="mist"></div>
+
+    <div class="bubble-container" id="guide-box">
+        <div class="cute-bubble" id="guide-text">
+            <!-- 初始文字 -->
+        </div>
+    </div>
+
+    <div class="cookie-plate" id="plate">
+        <img src="cookie_cocoa.png" class="cookie-btn" onclick="play(event)" alt="可可">
+        <img src="cookie_cream.png" class="cookie-btn" onclick="play(event)" alt="奶油">
+        <img src="cookie_berry.png" class="cookie-btn" onclick="play(event)" alt="莓果">
+    </div>
+
+    <div id="result-overlay">
+        <div class="result-title" id="r-title"></div>
+        <div class="result-text" id="r-text"></div>
+        <div class="maple-note">
+            <b>槭糖：</b><span id="r-action"></span>
+        </div>
+        <button class="btn-reset" onclick="reset()">再問一次</button>
+        
+        <div id="disclaimer">
+            槭糖小提醒：餅乾的魔法是給你一點勇氣，但真正的未來掌握在你手裡喔！<br>(此結果僅供娛樂與參考)
+        </div>
+    </div>
+</div>
+
+<script>
+    let bgmStarted = false;
+    function tryPlayBgm() {
+        if (!bgmStarted) {
+            const audio = document.getElementById('bgm-player');
+            audio.volume = 0.5;
+            audio.play().catch(e => console.log("等待互動後播放"));
+            bgmStarted = true;
+        }
+    }
+
+    const fortunes = [
+        // A (1-6) w=2
+        {t:"金糖酥酥籤", c:"你做的小努力，會被世界輕輕捧起。", w:2},
+        {t:"暖日奶油籤", c:"慢慢化開，你想的事正往好味道走。", w:2},
+        {t:"蜜糖開心籤", c:"好消息躲在轉角，快被你抓到。", w:2},
+        {t:"晴天曲奇籤", c:"今天適合大步一點，天會替你讓路。", w:2},
+        {t:"焦糖舒心籤", c:"你以為會黏牙的事，其實會甜。", w:2},
+        {t:"雲朵甜順籤", c:"別用力過頭，風會推著你走。", w:2},
+        // B (7-12) w=2
+        {t:"棉花糖暖籤", c:"別擔心，事情會比你想的溫柔。", w:2},
+        {t:"牛奶微甜籤", c:"一點耐心，就能把今天攪成順口的。", w:2},
+        {t:"輕旅餅乾籤", c:"別急著下結論，路還在展開。", w:2},
+        {t:"舒芙蕾順籤", c:"輕輕做、輕輕走，你的步伐剛剛好。", w:2},
+        {t:"安靜好日籤", c:"沒有大事，但都是好事。", w:2},
+        {t:"溫柔軟心籤", c:"你以為不被看見的努力，有人在心裡收好。", w:2},
+        // C (13-18) w=3
+        {t:"慢烤餅乾籤", c:"還沒熟，只差最後一點耐心。", w:3},
+        {t:"霧霧奶香籤", c:"你沒看清的，不代表是壞的。", w:3},
+        {t:"淡味可可籤", c:"少了點甜，可是方向是對的。", w:3},
+        {t:"小步前行籤", c:"今天適合一小步，而不是跳躍。", w:3},
+        {t:"半融甜心籤", c:"有點亂，但正在變成好味道。", w:3},
+        {t:"輕輕期待籤", c:"先別催結果，它正在往你那裡走。", w:3},
+        // D (19-24) w=4
+        {t:"可可苦甜籤", c:"先苦一下，甜會在後面等你。", w:4},
+        {t:"陰天布丁籤", c:"慢了點，不代表會掉下來。", w:4},
+        {t:"融化邊緣籤", c:"暫停一下，你的狀態需要降溫。", w:4},
+        {t:"碎碎心事籤", c:"把碎屑拍掉，你還能往前。", w:4},
+        {t:"小石子餅籤", c:"事情卡住，是提醒你換方法。", w:4},
+        {t:"未完烘焙籤", c:"現在不是答案，是過程。", w:4},
+        // E (25-30) w=4
+        {t:"灰灰糖粉籤", c:"你的心比問題更重，需要先放下點東西。", w:4},
+        {t:"潮濕餅乾籤", c:"今天不太適合做決定。", w:4},
+        {t:"迷路甜味籤", c:"你在找的不是答案，是勇氣。", w:4},
+        {t:"冷風可可籤", c:"別逞強，需要幫助時就說。", w:4},
+        {t:"傾斜小盤籤", c:"先扶好自己，再處理外面的事。", w:4},
+        {t:"空氣鬆餅籤", c:"想太多反而吃不到重點。", w:4},
+        // F (31-36) w=4
+        {t:"掉屑空籤", c:"答案現在不會說，時機還沒到。", w:4},
+        {t:"無味餅乾籤", c:"你的心太滿了，什麼味道都嚐不出來。", w:4},
+        {t:"安靜暗甜籤", c:"黑暗不是警告，是休息。", w:4},
+        {t:"深夜烤箱籤", c:"你還在重塑自己，別急著拿出成品。", w:4},
+        {t:"空口袋籤", c:"先補充能量，運氣會跟著回來。", w:4},
+        {t:"靜置等待籤", c:"答案正在生成，需要一段沈澱。", w:4}
+    ];
+
+    const actions = [
+        "泡一杯熱可可，享受 15 分鐘無事時光。",
+        "睡前對今天的自己說聲辛苦了。",
+        "對第一個想到的人說一句謝謝。",
+        "傳一個可愛貼圖給許久未聯絡的朋友。",
+        "把今天最難的一件事先完成。",
+        "清理書桌上的一個小角落。",
+        "抬頭看天空，找一個沒看過的細節。",
+        "回想今天讓你微笑的一個瞬間。",
+        "閉上眼深呼吸三次，放下手機。",
+        "去買一份平常捨不得吃的甜點。",
+        "刪掉手機裡 5 張模糊的照片。",
+        "寫下一件你很棒的事，貼在桌上。",
+        "晚餐多吃一樣綠色蔬菜。",
+        "聽一首輕快的歌，放空 10 分鐘。",
+        "回覆一則拖延已久的訊息。",
+        "列出明天想完成的三件小事。",
+        "對鏡子裡的自己大笑一下。",
+        "稱讚今天遇到的某一個人。",
+        "換個新髮圈或整理一下儀容。",
+        "穿上一件舒服的舊衣服。",
+        "去超商買個小點心獎勵自己。",
+        "喝完手邊的水，再裝滿一杯。",
+        "開窗讓新鮮空氣進來 5 分鐘。",
+        "把待辦清單裡最簡單的事劃掉。",
+        "檢查家中的盆栽或寵物，給予一些關愛。",
+        "喝一杯冰水，讓身體瞬間冷靜下來。",
+        "規劃下一餐的菜單，讓它變得特別。",
+        "找一個安靜的角落，專心冥想 3 分鐘。",
+        "睡前把髒衣服丟進洗衣籃，整理好混亂。",
+        "換上乾淨且舒服的襪子，給腳趾放個假。",
+        "整理你的錢包或卡夾，讓財運更順暢。",
+        "寫下一個你渴望在下週達成的短暫目標。",
+        "聽一集全新的 Podcast 或廣播節目。",
+        "嘗試一種新的伸展動作，活動僵硬的身體。",
+        "關閉手機通知一小時，享受真正的專注。",
+        "回想過去一週，謝謝自己做對的一件事。"
+    ];
+
+    const bubbleTexts = [
+        "槭糖：心中默唸您的問題，<br>選一塊餅乾🍪吧!",
+        "被吃掉的那個……<br>就是你的命運!"
+    ];
+    let bubbleIdx = 0;
+    const guideText = document.getElementById('guide-text');
+    
+    guideText.innerHTML = bubbleTexts[0];
+
+    setInterval(() => {
+        if(document.getElementById('guide-box').style.opacity === '0') return;
+        bubbleIdx = (bubbleIdx + 1) % bubbleTexts.length;
+        guideText.innerHTML = bubbleTexts[bubbleIdx];
+    }, 3500);
+
+    function getWeightedFortune() {
+        let totalW = 0;
+        fortunes.forEach(f => totalW += f.w);
+        
+        let random = Math.random() * totalW;
+        for (let f of fortunes) {
+            if (random < f.w) return f;
+            random -= f.w;
+        }
+        return fortunes[0];
+    }
+
+    function play(e) {
+        tryPlayBgm();
+
+        document.getElementById('guide-box').style.opacity = '0';
+        document.getElementById('plate').style.opacity = '0';
+        document.getElementById('plate').style.pointerEvents = 'none';
+
+        createCrumbs(e);
+
+        const mist = document.getElementById('mist');
+        mist.style.opacity = '1';
+
+        setTimeout(() => {
+            document.getElementById('bg-start').style.opacity = '0';
+            document.getElementById('bg-result').style.opacity = '1';
+        }, 800);
+
+        setTimeout(() => {
+            mist.style.opacity = '0';
+            showResult();
+        }, 1500);
+    }
+
+    function createCrumbs(e) {
+        const app = document.getElementById('app');
+        const rect = app.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const colors = ['#8D6E63', '#FFCC80', '#D7CCC8', '#FFF8E1'];
+        for(let i=0; i<16; i++) {
+            let crumb = document.createElement('div');
+            crumb.className = 'crumb';
+            crumb.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)];
+            crumb.style.left = x + 'px';
+            crumb.style.top = y + 'px';
+            
+            let angle = Math.random() * Math.PI * 2;
+            let velocity = 60 + Math.random() * 120;
+            let tx = Math.cos(angle) * velocity + 'px';
+            let ty = Math.sin(angle) * velocity + 'px';
+            
+            crumb.style.setProperty('--tx', tx);
+            crumb.style.setProperty('--ty', ty);
+            
+            crumb.style.animation = `crumb-explode 0.7s ease-out forwards`;
+            document.getElementById('app').appendChild(crumb);
+            
+            setTimeout(() => crumb.remove(), 700);
+        }
+    }
+
+    function showResult() {
+        const fortune = getWeightedFortune();
+        const action = actions[Math.floor(Math.random() * actions.length)];
+
+        document.getElementById('r-title').innerText = fortune.t;
+        document.getElementById('r-text').innerText = fortune.c;
+        document.getElementById('r-action').innerText = action;
+
+        const resultOverlay = document.getElementById('result-overlay');
+        // ★ 修復：開啟 visibility 才能看到 ★
+        resultOverlay.style.visibility = 'visible'; 
+        resultOverlay.style.opacity = '1';
+        resultOverlay.style.pointerEvents = 'auto';
+        
+        document.getElementById('disclaimer').style.opacity = '1';
+    }
+
+    function reset() {
+        const resultOverlay = document.getElementById('result-overlay');
+        resultOverlay.style.opacity = '0';
+        resultOverlay.style.pointerEvents = 'none';
+        
+        // 等待淡出後隱藏
+        setTimeout(() => {
+            resultOverlay.style.visibility = 'hidden';
+        }, 500);
+        
+        document.getElementById('disclaimer').style.opacity = '0';
+        
+        document.getElementById('bg-result').style.opacity = '0';
+        document.getElementById('bg-start').style.opacity = '1';
+        
+        setTimeout(() => {
+            document.getElementById('plate').style.opacity = '1';
+            document.getElementById('plate').style.pointerEvents = 'auto';
+            document.getElementById('guide-box').style.opacity = '1';
+            bubbleIdx = 0;
+            guideText.innerHTML = bubbleTexts[0];
+        }, 800);
+    }
+</script>
+
+</body>
+</html>
