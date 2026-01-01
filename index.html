@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+    
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
     <style>
         :root {
@@ -17,124 +19,307 @@
             --bubble-bg: #FFF8E1;
             --text-color: #5D4037;
             --accent-color: #E07A5F;
+            --unit: 1vw;
+        }
+
+        @media (min-width: 480px) {
+            :root {
+                --unit: 4.8px;
+            }
+        }
+
+        /* --- 模式變數設定 --- */
+        
+        /* 白天模式 */
+        body.day-mode {
+            --text-color: #3E2723;
+            --bubble-bg: #FFFDE7;
+        }
+        
+        /* 冬天模式 (類似白天，但偏冷色調文字可能需要調整，這裡沿用深色字) */
+        body.winter-mode {
+            --text-color: #263238; /* 偏冷一點的深灰藍 */
+            --bubble-bg: #ECEFF1;  /* 雪白色氣泡 */
+        }
+
+        /* 模式專屬特效顯示控制 */
+        .fire-effect, .sun-effect, .snow-effect, .steam-effect {
+            display: none !important;
+        }
+
+        /* 晚上：顯示火焰 */
+        body.night-mode .fire-effect { display: block !important; }
+        
+        /* 白天：顯示陽光 */
+        body.day-mode .sun-effect { display: block !important; }
+        
+        /* 冬天：顯示雪與蒸氣 */
+        body.winter-mode .snow-effect { display: block !important; }
+        body.winter-mode .steam-effect { display: block !important; }
+
+        /* 按鈕陰影調整 */
+        body.day-mode #daily-btn, body.winter-mode #daily-btn {
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)); 
+        }
+
+        /* 冬天文字陰影：加一點白色描邊感 */
+        body.winter-mode .result-stars, body.winter-mode .result-text {
+            text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8), 0 2px 5px rgba(0,0,0,0.2);
         }
 
         * { box-sizing: border-box; }
 
         body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            font-family: var(--main-font);
-            background-color: var(--bg-dark);
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            font-family: var(--main-font); background-color: var(--bg-dark);
+            -webkit-tap-highlight-color: transparent; user-select: none;
+            overscroll-behavior: none; 
         }
 
         #app {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            max-width: 480px;
-            margin: 0 auto;
-            background: #000;
-            overflow: hidden;
+            position: relative; width: 100%; height: 100%; max-width: 480px;
+            margin: 0 auto; background: #000; overflow: hidden;
             transform-style: preserve-3d; 
         }
 
-        /* --- 背景層 (修復顯示問題) --- */
+        /* --- 窗簾特效 --- */
+        .curtain-panel {
+            position: absolute; top: 0; width: 51%; height: 100%;
+            background-color: #3E2723; z-index: 999;
+            background-image: repeating-linear-gradient(90deg, #3E2723, #3E2723 4%, #291815 10%, #3E2723 16%);
+            transition: transform 2.5s cubic-bezier(0.77, 0, 0.175, 1);
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        #curtain-left { left: 0; transform-origin: left center; }
+        #curtain-right { right: 0; transform-origin: right center; }
+        body.open-curtain #curtain-left { transform: translateX(-100%); }
+        body.open-curtain #curtain-right { transform: translateX(100%); }
+
+        /* --- 背景層 --- */
         .bg-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            object-position: center bottom;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; object-position: center bottom;
             transition: opacity 0.8s ease-in-out;
             background-color: #332211; 
+            opacity: 0; /* 預設隱藏，由 JS 控制 */
+            z-index: 1;
         }
+        /* 當前激活的背景 */
+        .bg-layer.active { opacity: 1; z-index: 5; }
+        
+        /* 結果圖層 */
+        #bg-result { z-index: 6; opacity: 0; pointer-events: none;}
+        #bg-result.show { opacity: 1; pointer-events: auto; }
 
-        /* 確保開始畫面層級較高，預設顯示 */
-        #bg-start { opacity: 1; z-index: 5; }
-        /* 確保結果畫面層級較低，預設隱藏 */
-        #bg-result { opacity: 0; z-index: 1; }
-
-        /* --- 火焰特效 --- */
+        /* --- 火焰特效 (晚上用) --- */
         .fire-effect {
-            position: absolute;
-            top: 15%; 
-            left: 7%; 
-            width: 60px;
-            height: 60px;
+            position: absolute; top: 15%; left: 7%; 
+            width: calc(13 * var(--unit)); height: calc(13 * var(--unit));
             background: radial-gradient(circle, rgba(255, 160, 0, 0.7) 0%, rgba(255, 69, 0, 0) 70%);
-            border-radius: 50%;
-            filter: blur(6px);
-            mix-blend-mode: screen; 
+            border-radius: 50%; filter: blur(6px); mix-blend-mode: screen; 
             animation: flicker 0.15s infinite alternate;
-            pointer-events: none;
-            z-index: 6; /* 高於背景 */
-            opacity: 0.8;
+            pointer-events: none; z-index: 6; opacity: 0.8;
         }
-
         @keyframes flicker {
             0% { transform: scale(1); opacity: 0.6; }
             100% { transform: scale(1.15); opacity: 0.9; }
         }
 
-        /* --- 氣泡框 --- */
-        .bubble-container {
-            position: absolute;
-            /* ★ 修改：往上移一點，避免擋到餅乾 ★ */
-            bottom: 30%; 
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90%; 
-            z-index: 15;
-            pointer-events: none;
-            transition: opacity 0.3s;
+        /* --- 陽光與灰塵特效 (白天用) --- */
+        .sun-effect {
+            position: absolute; width: 100%; height: 100%; top: 0; left: 0;
+            pointer-events: none; z-index: 6; overflow: hidden;
         }
 
-        .cute-bubble {
-            background: var(--bubble-bg);
-            color: var(--text-color);
-            font-size: 24px; 
-            font-weight: 900; 
-            padding: 25px 20px;
-            border-radius: 35px;
-            border: 4px solid #FFECB3;
-            text-align: center;
-            line-height: 1.4;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            position: relative;
-            animation: bubble-bounce 3s infinite ease-in-out;
+        .sun-beam {
+            position: absolute; top: -30%; right: -20%;
+            width: 100%; height: 150%;
+            background: linear-gradient(to bottom left, rgba(255, 255, 255, 0.15) 0%, transparent 50%);
+            transform: rotate(-25deg);
+            filter: blur(30px);
         }
 
-        .cute-bubble::after {
-            content: '';
+        .dust-particle {
             position: absolute;
-            bottom: -12px;
-            left: 50%;
-            transform: translateX(-50%);
-            border-width: 12px 12px 0;
-            border-style: solid;
-            border-color: #FFECB3 transparent transparent transparent;
+            background: rgba(255, 253, 231, 0.9);
+            border-radius: 50%;
+            opacity: 0;
+            box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+            animation: float-dust linear infinite;
+        }
+        /* (省略重複的粒子定義，保持 V9.12 的設定) */
+        .dust-particle:nth-child(2) { left: 10%; top: 30%; width: 4px; height: 4px; animation-duration: 5s; animation-delay: 0s; }
+        .dust-particle:nth-child(3) { left: 40%; top: 10%; width: 3px; height: 3px; animation-duration: 7s; animation-delay: 1s; }
+        .dust-particle:nth-child(4) { left: 80%; top: 20%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 2s; }
+        .dust-particle:nth-child(5) { left: 20%; top: 60%; width: 4px; height: 4px; animation-duration: 8s; animation-delay: 0.5s; }
+        
+        @keyframes float-dust {
+            0% { transform: translateY(0) translateX(0); opacity: 0; }
+            10% { opacity: 0.7; }
+            50% { opacity: 0.9; } 
+            90% { opacity: 0.7; }
+            100% { transform: translateY(-60px) translateX(25px); opacity: 0; }
+        }
+
+        /* --- ★ V9.22 新增：冬天特效 (下雪 + 蒸氣) ★ --- */
+        
+        /* 1. 下雪特效 */
+        .snow-effect {
+            position: absolute; width: 100%; height: 100%; top: 0; left: 0;
+            pointer-events: none; z-index: 7; overflow: hidden;
         }
         
-        .cute-bubble::before {
-            content: '';
+        .snowflake {
             position: absolute;
-            bottom: -6px;
-            left: 50%;
-            transform: translateX(-50%);
-            border-width: 10px 10px 0;
-            border-style: solid;
-            border-color: var(--bubble-bg) transparent transparent transparent;
-            z-index: 1;
+            top: -10px;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.8;
+            animation: fall linear infinite;
+        }
+        
+        @keyframes fall {
+            0% { transform: translateY(-10px) translateX(0); opacity: 0; }
+            10% { opacity: 1; }
+            100% { transform: translateY(100vh) translateX(20px); opacity: 0.3; }
         }
 
+        /* 2. 咖啡冒煙特效 */
+        .steam-effect {
+            position: absolute;
+            /* 這裡設定咖啡杯的大致位置，請根據您的圖片調整 */
+            bottom: 35%; /* 假設杯子在桌面上 */
+            right: 20%;  /* 假設杯子在右側 */
+            width: 60px;
+            height: 100px;
+            pointer-events: none;
+            z-index: 8;
+        }
+
+        .steam-puff {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            filter: blur(8px);
+            animation: steam-rise 2s infinite ease-out;
+            opacity: 0;
+        }
+        
+        .steam-puff:nth-child(1) { animation-delay: 0s; transform: translateX(-5px); }
+        .steam-puff:nth-child(2) { animation-delay: 0.5s; transform: translateX(5px); }
+        .steam-puff:nth-child(3) { animation-delay: 1s; transform: translateX(-2px); }
+        .steam-puff:nth-child(4) { animation-delay: 1.5s; transform: translateX(3px); }
+
+        @keyframes steam-rise {
+            0% { transform: translateY(0) scale(1); opacity: 0; }
+            20% { opacity: 0.6; }
+            100% { transform: translateY(-60px) scale(2); opacity: 0; }
+        }
+
+        /* --- 點擊特效 (閃亮) --- */
+        .cursor-sparkle {
+            position: absolute;
+            background: #FFF;
+            clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%);
+            pointer-events: none; z-index: 9999;
+            transform-origin: center center;
+            animation: sparkle-fade 0.6s linear forwards;
+        }
+        @keyframes sparkle-fade {
+            0% { transform: translate(-50%, -50%) scale(0) rotate(0deg); opacity: 1; }
+            50% { transform: translate(-50%, -50%) scale(1) rotate(90deg); opacity: 0.8; }
+            100% { transform: translate(-50%, -50%) scale(0) rotate(180deg); opacity: 0; }
+        }
+
+        /* --- 功能按鈕區 --- */
+        .top-btn {
+            position: absolute; top: 4%; z-index: 25; cursor: pointer;
+            width: calc(15 * var(--unit)); height: auto; 
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); transition: transform 0.2s;
+        }
+        .top-btn:hover { transform: scale(1.1); }
+        .top-btn:active { transform: scale(0.95); }
+
+        #daily-btn { right: 5%; }
+        #daily-btn:hover { transform: scale(1.1) rotate(5deg); }
+        
+        /* --- 復古古銅珠鍊拉繩 --- */
+        #pull-switch-container {
+            position: absolute; top: 0; right: 25%; width: calc(6 * var(--unit));
+            height: auto; z-index: 40; cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            display: flex; justify-content: center;
+        }
+
+        .pull-img {
+            width: 100%; height: auto; display: block;
+            filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.6));
+            transition: transform 0.2s;
+        }
+
+        #pull-switch-container:hover .pull-img { transform: translateY(2px); }
+        .pulling .pull-img { animation: pull-action 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+        @keyframes pull-action {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(calc(6 * var(--unit))); } 
+            100% { transform: translateY(0); } 
+        }
+
+        /* --- 今日運勢顯示畫面 --- */
+        #daily-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(44, 34, 28, 0.9); z-index: 100;
+            visibility: hidden; opacity: 0;
+            transition: opacity 0.4s, visibility 0.4s;
+            display: flex; justify-content: center; align-items: center; padding: 20px;
+        }
+        .daily-letter-card {
+            background: #FFF8E1; width: 85%; max-width: 320px; padding: 30px 20px;
+            border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            text-align: center; border: 3px solid #D7CCC8;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+            transform: scale(0.8); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #daily-overlay.show .daily-letter-card { transform: scale(1); }
+        .daily-letter-title {
+             font-size: 24px; color: #E07A5F; font-weight: 900; margin-bottom: 20px;
+             border-bottom: 2px dashed #D7CCC8; padding-bottom: 10px; display: inline-block;
+        }
+        .daily-letter-stars { color: #FFB300; font-size: 40px; margin: 15px 0; letter-spacing: 5px; }
+        .daily-letter-color { font-size: 20px; color: #5D4037; font-weight: 700; margin-bottom: 30px; }
+        .btn-close-daily {
+            background: #5D4037; color: #fff; border: none; padding: 10px 30px; 
+            border-radius: 25px; font-size: 16px; font-weight: 700;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .btn-close-daily:hover { background: #E07A5F; }
+
+        /* --- 氣泡框 --- */
+        .bubble-container {
+            position: absolute; bottom: 32%;
+            left: 50%; transform: translateX(-50%);
+            width: 90%; z-index: 15; pointer-events: none; transition: opacity 0.3s;
+        }
+        .cute-bubble {
+            background: var(--bubble-bg); color: var(--text-color);
+            font-size: calc(5 * var(--unit)); font-weight: 900; 
+            padding: calc(5 * var(--unit)) calc(4 * var(--unit)); 
+            border-radius: 35px; border: 4px solid #FFECB3; text-align: center; line-height: 1.4;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative;
+            animation: bubble-bounce 3s infinite ease-in-out;
+        }
+        .cute-bubble::after {
+            content: ''; position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
+            border-width: 12px 12px 0; border-style: solid; border-color: #FFECB3 transparent transparent transparent;
+        }
+        .cute-bubble::before {
+            content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+            border-width: 10px 10px 0; border-style: solid; border-color: var(--bubble-bg) transparent transparent transparent; z-index: 1;
+        }
         @keyframes bubble-bounce {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-8px); }
@@ -142,51 +327,49 @@
 
         /* --- 餅乾區 --- */
         .cookie-plate {
-            position: absolute;
-            bottom: 12%; 
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: flex-end; 
-            gap: 15px; 
-            z-index: 20;
-            transition: opacity 0.5s;
+            position: absolute; bottom: 12%; width: 95%; 
+            display: flex; justify-content: center; align-items: flex-end; 
+            gap: calc(3 * var(--unit)); z-index: 20; transition: opacity 0.5s;
+            left: 50%; transform: translateX(-50%);
         }
 
-        .cookie-btn {
-            width: 120px; 
-            height: 120px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        /* 新增：外層容器 (負責上下漂浮動畫) */
+        .cookie-wrapper {
+            position: relative;
+            width: calc(25 * var(--unit)); height: calc(25 * var(--unit));
             animation: float 4s infinite ease-in-out;
+            cursor: pointer;
+            z-index: 20;
+            display: flex; justify-content: center; align-items: center;
+        }
+        
+        /* 針對特定甜點調整大小 (套用到 wrapper) */
+        .cookie-wrapper.size-pudding { width: calc(27.5 * var(--unit)); height: calc(27.5 * var(--unit)); }
+        .cookie-wrapper.size-canele { width: calc(23.75 * var(--unit)); height: calc(23.75 * var(--unit)); }
+
+        /* 修改：內層按鈕 (負責 Hover 放大) */
+        .cookie-btn {
+            width: 100%; height: 100%;
             object-fit: contain;
-            -webkit-tap-highlight-color: transparent;
-            outline: none;
-            /* ★ 確保有點擊區域 ★ */
-            pointer-events: auto;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.3s;
+            -webkit-tap-highlight-color: transparent; outline: none; pointer-events: auto;
+            /* 移除 animation: float，交給 wrapper 處理 */
         }
 
-        /* 左邊餅乾加大 */
-        .cookie-btn:nth-child(1) {
-            width: 140px;
-            height: 140px;
-            bottom: -10px;
+        /* 調整 positioning logic - 移動到 wrapper */
+        .cookie-wrapper:nth-child(1) { bottom: -10px; }
+        .cookie-wrapper:nth-child(2) { animation-delay: 1.2s; }
+        .cookie-wrapper:nth-child(3) { animation-delay: 2.4s; }
+
+        /* Hover 特效：當滑鼠懸停在 wrapper 時，放大內層的 btn */
+        .cookie-wrapper:hover .cookie-btn { 
+            transform: scale(1.1) translateY(-10px); 
+            filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.9)) brightness(1.1); 
         }
+        .cookie-wrapper:hover { z-index: 25; }
+        .cookie-wrapper:active .cookie-btn { transform: scale(0.95); filter: brightness(0.8); }
+
         
-        .cookie-btn:hover {
-            transform: scale(1.1) translateY(-10px);
-            filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.9)) brightness(1.1);
-            z-index: 25;
-        }
-        
-        .cookie-btn:active {
-            transform: scale(0.95);
-            filter: brightness(0.8);
-        }
-
-        .cookie-btn:nth-child(2) { animation-delay: 1.2s; }
-        .cookie-btn:nth-child(3) { animation-delay: 2.4s; }
-
         @keyframes float {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-6px); }
@@ -194,139 +377,136 @@
 
         /* --- 碎屑特效 --- */
         .crumb {
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            pointer-events: none;
-            z-index: 100;
-            opacity: 1;
+            position: absolute; 
+            width: calc(3 * var(--unit)); height: calc(3 * var(--unit));
+            border-radius: 50%; pointer-events: none; z-index: 100; opacity: 1;
             box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+            animation: crumb-explode 0.7s ease-out forwards;
         }
-
         @keyframes crumb-explode {
             0% { transform: translate(0, 0) scale(1); opacity: 1; }
-            100% { transform: translate(var(--tx), var(--ty)) scale(0.5); opacity: 0; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
         }
 
-        .mist-layer {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255, 248, 225, 0.4);
-            backdrop-filter: blur(4px);
-            opacity: 0;
-            pointer-events: none;
-            z-index: 40;
-            transition: opacity 1s;
-        }
-
-        /* --- 結果顯示區 (修復擋住問題) --- */
+        /* --- 結果顯示區 --- */
         #result-overlay {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 45%; 
-            z-index: 30;
-            
-            /* ★ 關鍵修復：預設隱藏且不可點擊 (解決擋住餅乾問題) ★ */
-            visibility: hidden; 
-            pointer-events: none;
-            
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 20px;
-            padding-bottom: 40px;
-            opacity: 0;
-            transition: opacity 1s 0.5s;
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 50%; z-index: 30;
+            visibility: hidden; pointer-events: none; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; text-align: center;
+            padding: 20px calc(5 * var(--unit)); padding-bottom: calc(5 * var(--unit));
+            opacity: 0; transition: opacity 1s 0.5s;
             text-shadow: 0 2px 10px rgba(255, 255, 255, 0.9);
         }
-
         .result-title {
-            font-size: 32px; 
-            color: #3E2723;
-            font-weight: 900;
-            margin-bottom: 10px;
-            background: rgba(255, 255, 255, 0.7);
-            padding: 8px 25px;
-            border-radius: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            font-size: calc(7 * var(--unit)); color: #3E2723; font-weight: 900; margin-bottom: 0; 
+            background: rgba(255, 255, 255, 0.7); padding: calc(2 * var(--unit)) calc(4 * var(--unit));
+            border-radius: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-
+        .result-stars {
+            font-size: calc(6 * var(--unit)); color: #FFB300;
+            margin-bottom: calc(1.5 * var(--unit)); margin-top: calc(1.5 * var(--unit));
+            letter-spacing: calc(1 * var(--unit)); 
+            text-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-family: sans-serif; 
+        }
         .result-text {
-            font-size: 20px; 
-            color: #4E342E;
-            margin-bottom: 20px;
-            line-height: 1.6;
-            max-width: 90%;
-            font-weight: 700;
+            font-size: calc(4.5 * var(--unit)); color: #4E342E; 
+            margin-bottom: calc(3 * var(--unit)); line-height: 1.5; max-width: 90%; font-weight: 700;
+        }
+        .maple-note {
+            font-size: calc(3.5 * var(--unit)); color: #E65100; background: rgba(255, 243, 224, 0.95);
+            padding: calc(3 * var(--unit)) calc(4 * var(--unit)); border-radius: 15px;
+            border: 2px dashed #FFB74D; max-width: 95%; font-weight: 700; 
+            margin-bottom: calc(3 * var(--unit));
+            display: flex; align-items: center; justify-content: center;
+        }
+        
+        /* 修改：移除邊框，放大尺寸 */
+        .maple-face-icon {
+            /* 調整：8.5 -> 9.5 (約放大 10%) */
+            width: calc(9.5 * var(--unit)); height: calc(9.5 * var(--unit));
+            border-radius: 50%; margin-right: calc(1.5 * var(--unit));
+            background: transparent; /* 設為透明或視圖片而定 */
+            object-fit: cover;
+            /* 新增：平滑過渡動畫 */
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+        }
+        
+        /* 新增：滑鼠懸停放大特效 */
+        .maple-face-icon:hover {
+            transform: scale(1.2);
+        }
+        
+        /* --- 按鈕佈局 --- */
+        .button-group {
+            position: relative; 
+            display: flex;
+            justify-content: center; 
+            align-items: center;
+            width: 100%; 
+            pointer-events: auto;
+            min-height: calc(10 * var(--unit)); 
+            padding: 0 calc(2 * var(--unit)); 
         }
 
-        .maple-note {
-            font-size: 16px;
-            color: #E65100;
-            background: rgba(255, 243, 224, 0.95);
-            padding: 10px 20px;
-            border-radius: 15px;
-            border: 2px dashed #FFB74D;
-            max-width: 95%;
-            animation: pop-in 0.5s ease-out 1s backwards;
-            font-weight: 700;
-            margin-bottom: 10px;
+        .btn-common {
+            background: var(--text-color); color: #fff; border: none;
+            padding: calc(2.5 * var(--unit)) calc(5 * var(--unit));
+            border-radius: 25px; font-family: var(--main-font); 
+            font-size: calc(3.5 * var(--unit)); font-weight: 700; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); opacity: 0.9;
+            transition: transform 0.1s ease-in-out; white-space: nowrap;
         }
+        
+        .btn-reset { z-index: 2; }
+
+        .btn-save {
+            position: absolute; right: 0; 
+            background: #FFF8E1; color: #5D4037; border: 2px solid #5D4037;
+            padding: calc(2.5 * var(--unit)) calc(3.5 * var(--unit));
+            font-size: calc(4 * var(--unit));
+        }
+        
+        .btn-common:active { transform: scale(0.95); }
+        .btn-reset:active { background: var(--accent-color); }
+        .btn-save:hover { background: #FFECB3; }
 
         #disclaimer {
-            position: absolute;
-            bottom: 5px;
-            width: 90%;
-            text-align: center;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 11px;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            line-height: 1.3;
-            background: rgba(0, 0, 0, 0.2);
-            padding: 5px 10px;
-            border-radius: 15px;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 1s 1s;
+            position: absolute; bottom: 5px; width: 90%; text-align: center; color: rgba(255, 255, 255, 0.6);
+            font-size: calc(2.5 * var(--unit)); font-weight: 500; line-height: 1.3;
+            background: rgba(0, 0, 0, 0.2); padding: 5px 10px; border-radius: 15px; pointer-events: none;
+            opacity: 0; transition: opacity 1s 1s;
         }
-
-        @keyframes pop-in {
-            from { transform: scale(0.8); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        .btn-reset {
-            margin-top: 15px;
-            background: var(--text-color);
-            color: #fff;
-            border: none;
-            padding: 12px 40px;
-            border-radius: 25px;
-            font-family: var(--main-font);
-            font-size: 18px;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            opacity: 0.9;
-            pointer-events: auto;
-            transition: transform 0.1s ease-in-out;
-        }
-        
-        .btn-reset:active {
-            transform: scale(1.1) !important;
-            background: var(--accent-color);
-        }
-        
         #bgm-player { display: none; }
     </style>
 </head>
 <body>
+
+<!-- 預覽專用腳本 -->
+<script>
+    document.addEventListener('error', function(e) {
+        if (e.target.tagName.toLowerCase() === 'img') {
+            e.target.onerror = null;
+            const altText = e.target.alt || 'Img';
+            let bgColor = 'E07A5F'; let textColor = 'FFF'; let size = '200x200';
+            
+            // 判斷不同背景圖
+            // 修正錯誤: 將 const 改為 let，因為 altText 可能會被重新賦值
+            let displayAlt = altText;
+
+            if(e.target.classList.contains('bg-layer')) {
+                size = '480x800'; 
+                if(e.target.src.includes('day')) { bgColor = 'FDF6E3'; displayAlt = '白天'; }
+                else if(e.target.src.includes('winter')) { bgColor = 'ECEFF1'; displayAlt = '冬天'; }
+                else { bgColor = '2C221C'; displayAlt = '晚上'; }
+            } else if (e.target.id === 'pull-cord-img') {
+                size = '60x300'; bgColor = '8D6E63'; displayAlt = '拉繩';
+            }
+            e.target.src = `https://placehold.co/${size}/${bgColor}/${textColor}?text=${encodeURIComponent(displayAlt)}`;
+        }
+    }, true);
+</script>
 
 <div id="app">
     <audio id="bgm-player" loop>
@@ -334,36 +514,82 @@
         您的瀏覽器不支援音樂播放
     </audio>
 
-    <img src="main_visual.png" id="bg-start" class="bg-layer" alt="主畫面" onerror="console.log('找不到 main_visual.png')">
-    <img src="result_visual.png" id="bg-result" class="bg-layer" alt="結果畫面" onerror="console.log('找不到 result_visual.png')">
+    <div id="curtain-left" class="curtain-panel"></div>
+    <div id="curtain-right" class="curtain-panel"></div>
 
-    <div class="fire-effect"></div>
+    <!-- 背景層：三種模式 (JS 控制 active class) -->
+    <img src="main_visual.png" id="bg-start" class="bg-layer active" alt="晚上主畫面">
+    <img src="main_visual_day.png" id="bg-day" class="bg-layer" alt="白天主畫面">
+    <img src="main_visual_winter.png" id="bg-winter" class="bg-layer" alt="冬天主畫面">
+    
+    <!-- 結果層：也需要冬天版 -->
+    <img src="result_visual.png" id="bg-result" class="bg-layer" alt="晚上結果畫面">
+    <!-- 若沒有分開的結果圖，可以先共用，或者在JS切換 -->
 
-    <div class="mist-layer" id="mist"></div>
+    <!-- 拉繩開關 -->
+    <div id="pull-switch-container" onclick="toggleMode()">
+        <img id="pull-cord-img" src="pull_cord.png" class="pull-img" alt="拉繩開關">
+    </div>
+    
+    <img id="daily-btn" src="daily_envelope.png" class="top-btn" onclick="showDailyFortune()" alt="今日運勢">
 
-    <div class="bubble-container" id="guide-box">
-        <div class="cute-bubble" id="guide-text">
-            <!-- 初始文字 -->
+    <div id="daily-overlay">
+        <div class="daily-letter-card">
+            <span class="daily-letter-title">📅 今日運勢書信</span>
+            <div id="daily-letter-stars" class="daily-letter-stars"></div>
+            <div id="daily-letter-color" class="daily-letter-color"></div>
+            <button class="btn-close-daily" onclick="closeDailyFortune()">收起信件</button>
         </div>
     </div>
 
-    <div class="cookie-plate" id="plate">
-        <img src="cookie_cocoa.png" class="cookie-btn" onclick="play(event)" alt="可可">
-        <img src="cookie_cream.png" class="cookie-btn" onclick="play(event)" alt="奶油">
-        <img src="cookie_berry.png" class="cookie-btn" onclick="play(event)" alt="莓果">
+    <!-- 1. 晚上特效 -->
+    <div class="fire-effect"></div>
+    
+    <!-- 2. 白天特效 -->
+    <div class="sun-effect">
+        <div class="sun-beam"></div>
+        <div class="dust-particle"></div><div class="dust-particle"></div><div class="dust-particle"></div>
+        <div class="dust-particle"></div><div class="dust-particle"></div><div class="dust-particle"></div>
     </div>
+
+    <!-- 3. 冬天特效 (★新增★) -->
+    <div class="snow-effect">
+        <!-- JS 會動態產生雪花，這裡先放幾個範例 -->
+        <div class="snowflake" style="left: 10%; animation-duration: 5s;"></div>
+        <div class="snowflake" style="left: 30%; animation-duration: 7s;"></div>
+        <div class="snowflake" style="left: 70%; animation-duration: 6s;"></div>
+        <div class="snowflake" style="left: 50%; animation-duration: 8s;"></div>
+    </div>
+    
+    <div class="steam-effect">
+        <div class="steam-puff"></div>
+        <div class="steam-puff"></div>
+        <div class="steam-puff"></div>
+        <div class="steam-puff"></div>
+    </div>
+
+    <div class="mist-layer" id="mist"></div>
+    <div class="bubble-container" id="guide-box">
+        <div class="cute-bubble" id="guide-text"></div>
+    </div>
+    <div class="cookie-plate" id="plate"></div>
 
     <div id="result-overlay">
         <div class="result-title" id="r-title"></div>
+        <div id="r-stars" class="result-stars"></div>
         <div class="result-text" id="r-text"></div>
-        <div class="maple-note">
-            <b>槭糖：</b><span id="r-action"></span>
-        </div>
-        <button class="btn-reset" onclick="reset()">再問一次</button>
         
-        <div id="disclaimer">
-            槭糖小提醒：餅乾的魔法是給你一點勇氣，但真正的未來掌握在你手裡喔！<br>(此結果僅供娛樂與參考)
+        <div class="maple-note">
+            <img src="maple_face.png" class="maple-face-icon" alt="槭糖頭像">
+            ：<span id="r-action"></span>
         </div>
+        
+        <div class="button-group" id="btn-group">
+            <button id="btn-reset" class="btn-common btn-reset" onclick="reset()">再問一次</button>
+            <button id="btn-save" class="btn-common btn-save" onclick="downloadResult()">📷</button>
+        </div>
+
+        <div id="disclaimer">槭糖小提醒：餅乾的魔法是給你一點勇氣，但真正的未來掌握在你手裡喔！<br>(此結果僅供娛樂與參考)</div>
     </div>
 </div>
 
@@ -372,215 +598,410 @@
     function tryPlayBgm() {
         if (!bgmStarted) {
             const audio = document.getElementById('bgm-player');
-            audio.volume = 0.5;
-            audio.play().catch(e => console.log("等待互動後播放"));
-            bgmStarted = true;
+            if(audio) {
+                audio.volume = 0.5;
+                audio.play().catch(e => console.log("等待互動後播放"));
+                bgmStarted = true;
+            }
         }
     }
 
+    // ★ V9.22 修改：三種模式切換 (0: 晚, 1: 白, 2: 冬) ★
+    let currentMode = 0; // 預設 0 (晚上)
+
+    function toggleMode() {
+        const container = document.getElementById('pull-switch-container');
+        if (container.classList.contains('pulling')) return;
+
+        container.classList.add('pulling');
+
+        // 動畫中途切換
+        setTimeout(() => {
+            currentMode = (currentMode + 1) % 3; // 循環 0 -> 1 -> 2 -> 0
+            updateModeUI();
+        }, 200);
+
+        setTimeout(() => {
+            container.classList.remove('pulling');
+        }, 400);
+    }
+
+    function updateModeUI() {
+        // 清除所有模式 class
+        document.body.classList.remove('night-mode', 'day-mode', 'winter-mode');
+        
+        // 隱藏所有背景 (除了結果頁)
+        document.querySelectorAll('.bg-layer:not(#bg-result)').forEach(el => el.classList.remove('active'));
+        
+        // 設定結果頁背景 (預設共用，您可依需求拆分 result_visual_winter.png)
+        const bgResult = document.getElementById('bg-result');
+
+        if (currentMode === 0) {
+            // 晚上
+            document.body.classList.add('night-mode');
+            document.getElementById('bg-start').classList.add('active');
+            bgResult.src = 'result_visual.png';
+        } else if (currentMode === 1) {
+            // 白天
+            document.body.classList.add('day-mode');
+            document.getElementById('bg-day').classList.add('active');
+            bgResult.src = 'result_visual_day.png';
+        } else {
+            // 冬天
+            document.body.classList.add('winter-mode');
+            document.getElementById('bg-winter').classList.add('active');
+            // 如果您有冬天的結果圖，請在這裡設定，暫時用白天的替代
+            bgResult.src = 'result_visual_winter.png'; 
+        }
+    }
+
+    // 初始化雪花
+    function initSnow() {
+        const snowContainer = document.querySelector('.snow-effect');
+        for(let i=0; i<30; i++) {
+            const snowflake = document.createElement('div');
+            snowflake.className = 'snowflake';
+            snowflake.style.left = Math.random() * 100 + '%';
+            snowflake.style.animationDuration = (Math.random() * 5 + 5) + 's'; // 5~10s
+            snowflake.style.animationDelay = (Math.random() * 5) + 's';
+            snowflake.style.width = (Math.random() * 4 + 2) + 'px';
+            snowflake.style.height = snowflake.style.width;
+            snowContainer.appendChild(snowflake);
+        }
+    }
+    initSnow();
+
+    const sweetsPool = [
+        { src: 'cookie_cocoa.png', alt: '可可餅乾' },
+        { src: 'cookie_cream.png', alt: '奶油餅乾' },
+        { src: 'cookie_berry.png', alt: '莓果餅乾' },
+        { src: 'cookie_checker.png', alt: '棋盤格餅乾' },
+        { src: 'cookie_jam.png', alt: '寶石果醬餅乾' },
+        { src: 'sweet_macaron.png', alt: '馬卡龍' },
+        { src: 'sweet_pudding.png', alt: '焦糖布丁' },
+        { src: 'sweet_canele.png', alt: '可麗露' },
+        { src: 'sweet_pretzel.png', alt: '蝴蝶餅' },
+        { src: 'sweet_canedandy.png', alt: '拐杖糖' }
+    ];
+
+    const luckyColors = ["奶茶色", "草莓紅", "薄荷綠", "星空藍", "檸檬黃", "葡萄紫", "焦糖色", "奶油白", "櫻花粉", "大地棕"];
+
     const fortunes = [
-        // A (1-6) w=2
-        {t:"金糖酥酥籤", c:"你做的小努力，會被世界輕輕捧起。", w:2},
-        {t:"暖日奶油籤", c:"慢慢化開，你想的事正往好味道走。", w:2},
-        {t:"蜜糖開心籤", c:"好消息躲在轉角，快被你抓到。", w:2},
-        {t:"晴天曲奇籤", c:"今天適合大步一點，天會替你讓路。", w:2},
-        {t:"焦糖舒心籤", c:"你以為會黏牙的事，其實會甜。", w:2},
-        {t:"雲朵甜順籤", c:"別用力過頭，風會推著你走。", w:2},
-        // B (7-12) w=2
-        {t:"棉花糖暖籤", c:"別擔心，事情會比你想的溫柔。", w:2},
-        {t:"牛奶微甜籤", c:"一點耐心，就能把今天攪成順口的。", w:2},
-        {t:"輕旅餅乾籤", c:"別急著下結論，路還在展開。", w:2},
-        {t:"舒芙蕾順籤", c:"輕輕做、輕輕走，你的步伐剛剛好。", w:2},
-        {t:"安靜好日籤", c:"沒有大事，但都是好事。", w:2},
-        {t:"溫柔軟心籤", c:"你以為不被看見的努力，有人在心裡收好。", w:2},
-        // C (13-18) w=3
-        {t:"慢烤餅乾籤", c:"還沒熟，只差最後一點耐心。", w:3},
-        {t:"霧霧奶香籤", c:"你沒看清的，不代表是壞的。", w:3},
-        {t:"淡味可可籤", c:"少了點甜，可是方向是對的。", w:3},
-        {t:"小步前行籤", c:"今天適合一小步，而不是跳躍。", w:3},
-        {t:"半融甜心籤", c:"有點亂，但正在變成好味道。", w:3},
-        {t:"輕輕期待籤", c:"先別催結果，它正在往你那裡走。", w:3},
-        // D (19-24) w=4
-        {t:"可可苦甜籤", c:"先苦一下，甜會在後面等你。", w:4},
-        {t:"陰天布丁籤", c:"慢了點，不代表會掉下來。", w:4},
-        {t:"融化邊緣籤", c:"暫停一下，你的狀態需要降溫。", w:4},
-        {t:"碎碎心事籤", c:"把碎屑拍掉，你還能往前。", w:4},
-        {t:"小石子餅籤", c:"事情卡住，是提醒你換方法。", w:4},
-        {t:"未完烘焙籤", c:"現在不是答案，是過程。", w:4},
-        // E (25-30) w=4
-        {t:"灰灰糖粉籤", c:"你的心比問題更重，需要先放下點東西。", w:4},
-        {t:"潮濕餅乾籤", c:"今天不太適合做決定。", w:4},
-        {t:"迷路甜味籤", c:"你在找的不是答案，是勇氣。", w:4},
-        {t:"冷風可可籤", c:"別逞強，需要幫助時就說。", w:4},
-        {t:"傾斜小盤籤", c:"先扶好自己，再處理外面的事。", w:4},
-        {t:"空氣鬆餅籤", c:"想太多反而吃不到重點。", w:4},
-        // F (31-36) w=4
-        {t:"掉屑空籤", c:"答案現在不會說，時機還沒到。", w:4},
-        {t:"無味餅乾籤", c:"你的心太滿了，什麼味道都嚐不出來。", w:4},
-        {t:"安靜暗甜籤", c:"黑暗不是警告，是休息。", w:4},
-        {t:"深夜烤箱籤", c:"你還在重塑自己，別急著拿出成品。", w:4},
-        {t:"空口袋籤", c:"先補充能量，運氣會跟著回來。", w:4},
-        {t:"靜置等待籤", c:"答案正在生成，需要一段沈澱。", w:4}
+        {t:"金糖酥酥籤", c:"你做的小努力，會被世界輕輕捧起。", w:5, s:5},
+        {t:"暖日奶油籤", c:"慢慢化開，你想的事正往好味道走。", w:5, s:5},
+        {t:"蜜糖開心籤", c:"好消息躲在轉角，快被你抓到。", w:5, s:5},
+        {t:"晴天曲奇籤", c:"今天適合大步一點，天會替你讓路。", w:5, s:5},
+        {t:"焦糖舒心籤", c:"你以為會黏牙的事，其實會甜。", w:5, s:5},
+        {t:"雲朵甜順籤", c:"別用力過頭，風會推著你走。", w:5, s:5},
+        {t:"棉花糖暖籤", c:"別擔心，事情會比你想的溫柔。", w:4, s:4},
+        {t:"牛奶微甜籤", c:"一點耐心，就能把今天攪成順口的。", w:4, s:4},
+        {t:"輕旅餅乾籤", c:"別急著下結論，路還在展開。", w:4, s:4},
+        {t:"舒芙蕾順籤", c:"輕輕做、輕輕走，你的步伐剛剛好。", w:4, s:4},
+        {t:"安靜好日籤", c:"沒有大事，但都是好事。", w:4, s:4},
+        {t:"溫柔軟心籤", c:"你以為不被看見的努力，有人在心裡收好。", w:4, s:4},
+        {t:"慢烤餅乾籤", c:"還沒熟，只差最後一點耐心。", w:4, s:3},
+        {t:"霧霧奶香籤", c:"你沒看清的，不代表是壞的。", w:4, s:3},
+        {t:"淡味可可籤", c:"少了點甜，可是方向是對的。", w:4, s:3},
+        {t:"小步前行籤", c:"今天適合一小步，而不是跳躍。", w:4, s:3},
+        {t:"半融甜心籤", c:"有點亂，但正在變成好味道。", w:4, s:3},
+        {t:"輕輕期待籤", c:"先別催結果，它正在往你那裡走。", w:4, s:3},
+        {t:"可可苦甜籤", c:"先苦一下，甜會在後面等你。", w:5, s:2},
+        {t:"陰天布丁籤", c:"慢了點，不代表會掉下來。", w:5, s:2},
+        {t:"融化邊緣籤", c:"暫停一下，你的狀態需要降溫。", w:5, s:2},
+        {t:"碎碎心事籤", c:"把碎屑拍掉，你還能往前。", w:5, s:2},
+        {t:"小石子餅籤", c:"事情卡住，是提醒你換方法。", w:5, s:2},
+        {t:"未完烘焙籤", c:"現在不是答案，是過程。", w:5, s:2},
+        {t:"灰灰糖粉籤", c:"你的心比問題更重，需要先放下點東西。", w:2, s:1},
+        {t:"潮濕餅乾籤", c:"今天不太適合做決定。", w:2, s:1},
+        {t:"迷路甜味籤", c:"你在找的不是答案，是勇氣。", w:2, s:1},
+        {t:"冷風可可籤", c:"別逞強，需要幫助時就說。", w:2, s:1},
+        {t:"傾斜小盤籤", c:"先扶好自己，再處理外面的事。", w:2, s:1},
+        {t:"空氣鬆餅籤", c:"想太多反而吃不到重點。", w:2, s:1},
+        {t:"掉屑空籤", c:"答案現在不會說，時機還沒到。", w:2, s:1},
+        {t:"無味餅乾籤", c:"你的心太滿了，什麼味道都嚐不出來。", w:2, s:1},
+        {t:"安靜暗甜籤", c:"黑暗不是警告，是休息。", w:2, s:1},
+        {t:"深夜烤箱籤", c:"你還在重塑自己，別急著拿出成品。", w:2, s:1},
+        {t:"空口袋籤", c:"先補充能量，運氣會跟著回來。", w:2, s:1},
+        {t:"靜置等待籤", c:"答案正在生成，需要一段沈澱。", w:2, s:1}
     ];
 
-    const actions = [
-        "泡一杯熱可可，享受 15 分鐘無事時光。",
-        "睡前對今天的自己說聲辛苦了。",
-        "對第一個想到的人說一句謝謝。",
-        "傳一個可愛貼圖給許久未聯絡的朋友。",
-        "把今天最難的一件事先完成。",
-        "清理書桌上的一個小角落。",
-        "抬頭看天空，找一個沒看過的細節。",
-        "回想今天讓你微笑的一個瞬間。",
-        "閉上眼深呼吸三次，放下手機。",
-        "去買一份平常捨不得吃的甜點。",
-        "刪掉手機裡 5 張模糊的照片。",
-        "寫下一件你很棒的事，貼在桌上。",
-        "晚餐多吃一樣綠色蔬菜。",
-        "聽一首輕快的歌，放空 10 分鐘。",
-        "回覆一則拖延已久的訊息。",
-        "列出明天想完成的三件小事。",
-        "對鏡子裡的自己大笑一下。",
-        "稱讚今天遇到的某一個人。",
-        "換個新髮圈或整理一下儀容。",
-        "穿上一件舒服的舊衣服。",
-        "去超商買個小點心獎勵自己。",
-        "喝完手邊的水，再裝滿一杯。",
-        "開窗讓新鮮空氣進來 5 分鐘。",
-        "把待辦清單裡最簡單的事劃掉。",
-        "檢查家中的盆栽或寵物，給予一些關愛。",
-        "喝一杯冰水，讓身體瞬間冷靜下來。",
-        "規劃下一餐的菜單，讓它變得特別。",
-        "找一個安靜的角落，專心冥想 3 分鐘。",
-        "睡前把髒衣服丟進洗衣籃，整理好混亂。",
-        "換上乾淨且舒服的襪子，給腳趾放個假。",
-        "整理你的錢包或卡夾，讓財運更順暢。",
-        "寫下一個你渴望在下週達成的短暫目標。",
-        "聽一集全新的 Podcast 或廣播節目。",
-        "嘗試一種新的伸展動作，活動僵硬的身體。",
-        "關閉手機通知一小時，享受真正的專注。",
-        "回想過去一週，謝謝自己做對的一件事。"
-    ];
-
-    const bubbleTexts = [
-        "槭糖：心中默唸您的問題，<br>選一塊餅乾🍪吧!",
-        "被吃掉的那個……<br>就是你的命運!"
-    ];
+    const actions = ["泡一杯熱可可，享受 15 分鐘無事時光。","睡前對今天的自己說聲辛苦了。","對第一個想到的人說一句謝謝。","傳一個可愛貼圖給許久未聯絡的朋友。","把今天最難的一件事先完成。","清理書桌上的一個小角落。","抬頭看天空，找一個沒看過的細節。","回想今天讓你微笑的一個瞬間。","閉上眼深呼吸三次，放下手機。","去買一份平常捨不得吃的甜點。","刪掉手機裡 5 張模糊的照片。","寫下一件你很棒的事，貼在桌上。","晚餐多吃一樣綠色蔬菜。","聽一首輕快的歌，放空 10 分鐘。","回覆一則拖延已久的訊息。","列出明天想完成的三件小事。","對鏡子裡的自己大笑一下。","稱讚今天遇到的某一個人。","換個新髮圈或整理一下儀容。","穿上一件舒服的舊衣服。","去超商買個小點心獎勵自己。","喝完手邊的水，再裝滿一杯。","開窗讓新鮮空氣進來 5 分鐘。","把待辦清單裡最簡單的事劃掉。","檢查家中的盆栽或寵物，給予一些關愛。","喝一杯冰水，讓身體瞬間冷靜下來。","規劃下一餐的菜單，讓它變得特別。","找一個安靜的角落，專心冥想 3 分鐘。","睡前把髒衣服丟進洗衣籃，整理好混亂。","換上乾淨且舒服的襪子，給腳趾放個假。","整理你的錢包或卡夾，讓財運更順暢。","寫下一個你渴望在下週達成的短暫目標。","聽一集全新的 Podcast 或廣播節目。","嘗試一種新的伸展動作，活動僵硬的身體。","關閉手機通知一小時，享受真正的專注。","回想過去一週，謝謝自己做對的一件事。"];
+    const bubbleTexts = ["槭糖：心中默唸您的問題，<br>選出 藏著答案 的那個吧！", "被吃掉的那個……<br>就是你的命運!"];
     let bubbleIdx = 0;
     const guideText = document.getElementById('guide-text');
     
     guideText.innerHTML = bubbleTexts[0];
-
     setInterval(() => {
         if(document.getElementById('guide-box').style.opacity === '0') return;
         bubbleIdx = (bubbleIdx + 1) % bubbleTexts.length;
         guideText.innerHTML = bubbleTexts[bubbleIdx];
     }, 3500);
 
-    function getWeightedFortune() {
-        let totalW = 0;
-        fortunes.forEach(f => totalW += f.w);
-        
-        let random = Math.random() * totalW;
-        for (let f of fortunes) {
-            if (random < f.w) return f;
-            random -= f.w;
+    // ★ 補回遺失的運勢功能函式
+    function initDailyFortune() {
+        const today = new Date().toDateString();
+        const storedDate = localStorage.getItem('maple_date');
+        if (today !== storedDate) {
+            const starCount = Math.floor(Math.random() * 3) + 3;
+            const stars = "★".repeat(starCount) + "☆".repeat(5 - starCount);
+            const color = luckyColors[Math.floor(Math.random() * luckyColors.length)];
+            localStorage.setItem('maple_date', today);
+            localStorage.setItem('maple_stars', stars);
+            localStorage.setItem('maple_color', color);
         }
+    }
+
+    function showDailyFortune() {
+        tryPlayBgm();
+        document.getElementById('daily-letter-stars').innerText = localStorage.getItem('maple_stars') || '★★★★★';
+        document.getElementById('daily-letter-color').innerText = "幸運色：" + (localStorage.getItem('maple_color') || '奶茶色');
+        const overlay = document.getElementById('daily-overlay');
+        overlay.style.visibility = 'visible'; overlay.style.opacity = '1';
+        setTimeout(() => overlay.classList.add('show'), 10);
+    }
+
+    function closeDailyFortune() {
+        const overlay = document.getElementById('daily-overlay');
+        overlay.classList.remove('show'); overlay.style.opacity = '0';
+        setTimeout(() => { overlay.style.visibility = 'hidden'; }, 400);
+    }
+
+    // ★ 新增變數：紀錄上一輪出現過的點心
+    let lastShownSweets = [];
+
+    function renderRandomCookies() {
+        const plate = document.getElementById('plate');
+        plate.innerHTML = '';
+        
+        // ★ 修改邏輯：先從池子裡剔除上一輪出現過的點心
+        // 這樣剩下的點心 (10 - 3 = 7個) 就不會跟剛剛重複
+        let availablePool = sweetsPool.filter(sweet => !lastShownSweets.includes(sweet));
+
+        // 如果可用數量不夠 (防呆機制，理論上 pool > 6 就不會發生)，就重置為全部
+        if (availablePool.length < 3) {
+            availablePool = [...sweetsPool];
+        }
+
+        let shuffled = [...availablePool];
+        // Fisher-Yates 洗牌
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        
+        const selectedSweets = shuffled.slice(0, 3);
+        
+        // ★ 紀錄這次選出的點心，供下一輪過濾用
+        lastShownSweets = selectedSweets;
+
+        selectedSweets.forEach((sweet, index) => {
+            // ★ 新增：外層容器 (解決 hover 與 animation 衝突)
+            const wrapper = document.createElement('div');
+            wrapper.className = 'cookie-wrapper';
+            // 將 Delay 設定在 wrapper 上
+            wrapper.style.animationDelay = (index * 0.8) + 's';
+            // 將特定尺寸的 class 加在 wrapper 上
+            if (sweet.src.includes('pudding')) wrapper.classList.add('size-pudding');
+            if (sweet.src.includes('canele')) wrapper.classList.add('size-canele');
+
+            // 點擊事件移到 wrapper
+            wrapper.onclick = (e) => play(e);
+
+            const img = document.createElement('img');
+            img.src = sweet.src; 
+            img.alt = sweet.alt; 
+            img.className = 'cookie-btn';
+            
+            img.onerror = function() {
+                const s = 200;
+                this.src = `https://placehold.co/${s}x${s}/E07A5F/FFF?text=${encodeURIComponent(sweet.alt)}`;
+            };
+
+            wrapper.appendChild(img);
+            plate.appendChild(wrapper);
+        });
+    }
+
+    initDailyFortune();
+    renderRandomCookies();
+    // ★ 初始化 UI：根據 currentMode 設置初始狀態
+    updateModeUI();
+    
+    setTimeout(() => {
+        document.body.classList.add('open-curtain');
+    }, 500);
+
+    function getWeightedFortune() {
+        let totalW = 0; fortunes.forEach(f => totalW += f.w);
+        let random = Math.random() * totalW;
+        for (let f of fortunes) { if (random < f.w) return f; random -= f.w; }
         return fortunes[0];
     }
 
     function play(e) {
         tryPlayBgm();
-
         document.getElementById('guide-box').style.opacity = '0';
         document.getElementById('plate').style.opacity = '0';
         document.getElementById('plate').style.pointerEvents = 'none';
+        
+        document.getElementById('daily-btn').style.opacity = '0';
+        document.getElementById('daily-btn').style.pointerEvents = 'none';
+        document.getElementById('pull-switch-container').style.opacity = '0';
+        document.getElementById('pull-switch-container').style.pointerEvents = 'none';
 
         createCrumbs(e);
-
         const mist = document.getElementById('mist');
         mist.style.opacity = '1';
-
+        
+        // ★ 進入結果頁時，顯示結果層背景 (根據模式)
+        const bgResult = document.getElementById('bg-result');
         setTimeout(() => {
-            document.getElementById('bg-start').style.opacity = '0';
-            document.getElementById('bg-result').style.opacity = '1';
+            bgResult.classList.add('show');
         }, 800);
-
-        setTimeout(() => {
-            mist.style.opacity = '0';
-            showResult();
-        }, 1500);
+        
+        setTimeout(() => { mist.style.opacity = '0'; showResult(); }, 1500);
     }
 
     function createCrumbs(e) {
-        const app = document.getElementById('app');
-        const rect = app.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        const colors = ['#8D6E63', '#FFCC80', '#D7CCC8', '#FFF8E1'];
+        const app = document.getElementById('app'); const rect = app.getBoundingClientRect();
+        let clientX = e.clientX; let clientY = e.clientY;
+        if(e.changedTouches && e.changedTouches.length > 0) { clientX = e.changedTouches[0].clientX; clientY = e.changedTouches[0].clientY; }
+        const x = clientX - rect.left; const y = clientY - rect.top;
+        const colors = ['#8D6E63', '#FFCC80', '#D7CCC8', '#FFF8E1', '#E07A5F'];
         for(let i=0; i<16; i++) {
-            let crumb = document.createElement('div');
-            crumb.className = 'crumb';
+            let crumb = document.createElement('div'); crumb.className = 'crumb';
             crumb.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)];
-            crumb.style.left = x + 'px';
-            crumb.style.top = y + 'px';
-            
-            let angle = Math.random() * Math.PI * 2;
-            let velocity = 60 + Math.random() * 120;
-            let tx = Math.cos(angle) * velocity + 'px';
-            let ty = Math.sin(angle) * velocity + 'px';
-            
-            crumb.style.setProperty('--tx', tx);
-            crumb.style.setProperty('--ty', ty);
-            
+            crumb.style.left = x + 'px'; crumb.style.top = y + 'px';
+            let angle = Math.random() * Math.PI * 2; let velocity = 60 + Math.random() * 120;
+            let tx = Math.cos(angle) * velocity + 'px'; let ty = Math.sin(angle) * velocity + 'px';
+            crumb.style.setProperty('--tx', tx); crumb.style.setProperty('--ty', ty);
             crumb.style.animation = `crumb-explode 0.7s ease-out forwards`;
             document.getElementById('app').appendChild(crumb);
-            
             setTimeout(() => crumb.remove(), 700);
         }
     }
 
+    let lastActionIndex = -1;
+
     function showResult() {
         const fortune = getWeightedFortune();
-        const action = actions[Math.floor(Math.random() * actions.length)];
+        
+        let actionIndex;
+        do {
+            actionIndex = Math.floor(Math.random() * actions.length);
+        } while (actionIndex === lastActionIndex && actions.length > 1);
+        lastActionIndex = actionIndex;
+        
+        const action = actions[actionIndex];
 
         document.getElementById('r-title').innerText = fortune.t;
         document.getElementById('r-text').innerText = fortune.c;
         document.getElementById('r-action').innerText = action;
+        
+        const starStr = "★".repeat(fortune.s) + "☆".repeat(5 - fortune.s);
+        document.getElementById('r-stars').innerText = starStr;
 
         const resultOverlay = document.getElementById('result-overlay');
-        // ★ 修復：開啟 visibility 才能看到 ★
-        resultOverlay.style.visibility = 'visible'; 
-        resultOverlay.style.opacity = '1';
-        resultOverlay.style.pointerEvents = 'auto';
-        
+        resultOverlay.style.visibility = 'visible'; resultOverlay.style.opacity = '1'; resultOverlay.style.pointerEvents = 'auto';
         document.getElementById('disclaimer').style.opacity = '1';
     }
 
     function reset() {
         const resultOverlay = document.getElementById('result-overlay');
-        resultOverlay.style.opacity = '0';
-        resultOverlay.style.pointerEvents = 'none';
+        resultOverlay.style.opacity = '0'; resultOverlay.style.pointerEvents = 'none';
         
-        // 等待淡出後隱藏
-        setTimeout(() => {
-            resultOverlay.style.visibility = 'hidden';
-        }, 500);
-        
+        const bgResult = document.getElementById('bg-result');
+        bgResult.classList.remove('show');
+
+        setTimeout(() => { resultOverlay.style.visibility = 'hidden'; }, 500);
         document.getElementById('disclaimer').style.opacity = '0';
         
-        document.getElementById('bg-result').style.opacity = '0';
-        document.getElementById('bg-start').style.opacity = '1';
-        
         setTimeout(() => {
-            document.getElementById('plate').style.opacity = '1';
-            document.getElementById('plate').style.pointerEvents = 'auto';
+            renderRandomCookies();
+            document.getElementById('plate').style.opacity = '1'; document.getElementById('plate').style.pointerEvents = 'auto';
             document.getElementById('guide-box').style.opacity = '1';
-            bubbleIdx = 0;
-            guideText.innerHTML = bubbleTexts[0];
+            
+            document.getElementById('daily-btn').style.opacity = '1';
+            document.getElementById('daily-btn').style.pointerEvents = 'auto';
+            document.getElementById('pull-switch-container').style.opacity = '1';
+            document.getElementById('pull-switch-container').style.pointerEvents = 'auto';
+            
+            bubbleIdx = 0; guideText.innerHTML = bubbleTexts[0];
         }, 800);
     }
+
+    function downloadResult() {
+        const app = document.getElementById('app');
+        const btnGroup = document.getElementById('btn-group');
+        const dailyBtn = document.getElementById('daily-btn');
+        const pullSwitch = document.getElementById('pull-switch-container'); 
+        
+        btnGroup.style.display = 'none';
+        dailyBtn.style.display = 'none';
+        pullSwitch.style.display = 'none';
+
+        html2canvas(app, {
+            scale: 2, 
+            backgroundColor: null, 
+            useCORS: true 
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = 'maple_fortune_result.png';
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+
+            btnGroup.style.display = 'flex';
+            dailyBtn.style.display = 'block';
+            pullSwitch.style.display = 'flex';
+        }).catch(err => {
+            console.error("截圖失敗:", err);
+            alert("圖片保存失敗，請嘗試手動截圖 > <");
+            btnGroup.style.display = 'flex';
+            dailyBtn.style.display = 'block';
+            pullSwitch.style.display = 'flex';
+        });
+    }
+
+    let sparkleThrottle = 0;
+    
+    function createSparkle(x, y) {
+        sparkleThrottle++;
+        if (sparkleThrottle % 2 !== 0) return;
+
+        const app = document.getElementById('app');
+        const rect = app.getBoundingClientRect();
+        
+        if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+
+        const count = Math.random() > 0.5 ? 2 : 1;
+
+        for (let i = 0; i < count; i++) {
+            const sparkle = document.createElement('div');
+            sparkle.className = 'cursor-sparkle';
+            const size = Math.random() * 8 + 6;
+            sparkle.style.width = size + 'px';
+            sparkle.style.height = size + 'px';
+            const colors = ['#FFFFFF', '#FFF9C4', '#FFF3E0'];
+            sparkle.style.background = colors[Math.floor(Math.random() * colors.length)];
+            const offsetX = (Math.random() - 0.5) * 20;
+            const offsetY = (Math.random() - 0.5) * 20;
+            sparkle.style.left = (x - rect.left + offsetX) + 'px';
+            sparkle.style.top = (y - rect.top + offsetY) + 'px';
+            sparkle.style.animationDuration = (Math.random() * 0.4 + 0.4) + 's';
+            app.appendChild(sparkle);
+            setTimeout(() => sparkle.remove(), 1000);
+        }
+    }
+
+    document.addEventListener('mousemove', (e) => {
+        createSparkle(e.clientX, e.clientY);
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (e.changedTouches && e.changedTouches.length > 0) {
+            createSparkle(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        }
+    }, { passive: true });
 </script>
 
 </body>
