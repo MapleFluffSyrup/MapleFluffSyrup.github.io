@@ -607,7 +607,8 @@
     }
 
     // ★ V9.22 修改：三種模式切換 (0: 晚, 1: 白, 2: 冬) ★
-    let currentMode = 0; // 預設 0 (晚上)
+    // 修改為隨機初始畫面
+    let currentMode = Math.floor(Math.random() * 3); 
 
     function toggleMode() {
         const container = document.getElementById('pull-switch-container');
